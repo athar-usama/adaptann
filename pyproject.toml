@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "adaptann"
+version = "0.1.0"
+description = "A from-scratch HNSW vector index with a self-tuning layer that adapts to drifting query traffic, in pure Python and NumPy."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Usama Athar" }]
+keywords = ["ann", "vector-search", "hnsw", "vector-database", "nearest-neighbor", "from-scratch"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "numpy>=1.24",
+    "matplotlib>=3.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+adaptann = "adaptann.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/adaptann"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E731", "B905"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
