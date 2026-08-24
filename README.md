@@ -1,10 +1,14 @@
 <h1 align="center">adaptann</h1>
 
-**A from-scratch HNSW approximate-nearest-neighbor index, in pure Python and NumPy, with a self-tuning layer that adapts to drifting query traffic without a full rebuild.**
+<p align="center">
+  <strong>A from-scratch HNSW approximate-nearest-neighbor index, in pure Python and NumPy, with a self-tuning layer that adapts to drifting query traffic without a full rebuild.</strong>
+</p>
 
-![Python](https://img.shields.io/badge/python-3.10%2B-blue)
-![Tests](https://img.shields.io/badge/tests-9%20passing-brightgreen)
-![License](https://img.shields.io/badge/license-MIT-green)
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python">
+  <img src="https://img.shields.io/badge/tests-9%20passing-brightgreen" alt="Tests">
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
+</p>
 
 Most "build an ANN index from scratch" projects stop once construction and search match the paper (Malkov and Yashunin, 2016) and recall looks good against brute force. This one adds the part real vector databases actually have to deal with and toy clones usually skip: query traffic is not static. A recommendation index gets hammered on whatever topic is trending this hour; a RAG index gets hammered on whatever the last support ticket was about. A graph built once, for one query distribution, drifts out of shape. This index watches which regions of the graph its own queries keep landing in and densifies those regions on the fly, with no rebuild, and the effect is measured honestly below, including the one place it costs something.
 
