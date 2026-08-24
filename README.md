@@ -1,4 +1,4 @@
-# adaptann
+<h1 align="center">adaptann</h1>
 
 **A from-scratch HNSW approximate-nearest-neighbor index, in pure Python and NumPy, with a self-tuning layer that adapts to drifting query traffic without a full rebuild.**
 
@@ -10,15 +10,21 @@ Most "build an ANN index from scratch" projects stop once construction and searc
 
 ## What the drifting workload actually showed
 
-![Recall@k over a simulated drifting workload, static vs self-tuning](assets/recall_over_time.png)
+<p align="center">
+  <img src="assets/recall_over_time.png" alt="Recall@k over a simulated drifting workload, static vs self-tuning">
+</p>
 
 The workload cycles a burst of queries through five topic clusters, twice around. Every burst is a scenario the static index was never specifically built for; the self-tuning index sees the same traffic and closes the gap within a batch or two, then keeps it closed even when traffic drifts away and back a full cycle later. That is the whole pitch in one picture, produced by [`demos/benchmark.py`](src/adaptann/demos/benchmark.py), not staged.
 
-![Mean recall@k and p99 search latency, static vs self-tuning](assets/summary_bars.png)
+<p align="center">
+  <img src="assets/summary_bars.png" alt="Mean recall@k and p99 search latency, static vs self-tuning">
+</p>
 
 Across the full simulated run: mean recall@10 goes from **83.3%** (static) to **99.0%** (self-tuning). That is not free; see [what self-tuning actually costs](#what-self-tuning-actually-costs) below for why p99 latency goes up too, and why that is the correct trade for this mechanism, not a bug.
 
-![Topic 0, the hardest-to-reach cluster, cold vs warmed up](assets/cold_start_recovery.png)
+<p align="center">
+  <img src="assets/cold_start_recovery.png" alt="Topic 0, the hardest-to-reach cluster, cold vs warmed up">
+</p>
 
 The single sharpest number in this project: topic 0's recall on its first-ever burst of traffic (cold, nothing promoted yet) versus its second burst, a full cycle later. The static index is stuck at the same low recall every time, because nothing about it can change. The self-tuning index densified topic 0 the first time it got hot and never forgot, so the second time is a clean 100%.
 
@@ -35,7 +41,9 @@ From-scratch HNSW is well-trodden ground. The parts of this repo that are genuin
 
 The first self-tuning mechanism promoted a hot node to one more graph layer, the same way a fresh insert climbs the hierarchy, on the theory that a better-placed entry point gets a query into the right neighborhood faster. Testing it against a deep-copied static baseline, given the exact same queries, showed no real benefit.
 
-![Mean distance computations per query, split into upper-layer descent vs. the layer-0 pass, static vs. the abandoned promotion mechanism](assets/promotion_vs_densify.png)
+<p align="center">
+  <img src="assets/promotion_vs_densify.png" alt="Mean distance computations per query, split into upper-layer descent vs. the layer-0 pass, static vs. the abandoned promotion mechanism">
+</p>
 
 A per-layer breakdown of that cost is what explained it, and [`demos/promotion_diagnostic.py`](src/adaptann/demos/promotion_diagnostic.py) reconstructs the abandoned mechanism from the pieces `HNSW` still exposes internally to reproduce this chart on demand. Layer 0's search cost, which is bounded by `ef` and dominates the total (291 vs. 288 above, averaged over five seeds), was statistically unaffected by promotion. Promotion never touches layer-0 edges, so it could not have changed that number. All it did was add roughly one more upper layer to descend through on the way down, and even that shows up as noise-level (20 vs. 21 above), because the greedy `ef=1` descent already landed close enough to the target region without any promotion at all. Recall@k told the same story from a different angle: on the cold-cluster scenario used to test this, recall was already 1.0 at every `ef` tried, even on the unmodified static index, so there was no room for a smarter entry point to show up in that metric either.
 
@@ -45,7 +53,9 @@ The redesign that followed from that diagnosis: stop touching the hierarchy, and
 
 Densifying a node's neighborhood means later searches that pass through it examine more candidates, not fewer.
 
-![A typical node's real layer-0 neighbors, drawn one spoke per neighbor, next to a densified node's](assets/degree_widening.svg)
+<p align="center">
+  <img src="assets/degree_widening.svg" alt="A typical node's real layer-0 neighbors, drawn one spoke per neighbor, next to a densified node's">
+</p>
 
 A never-hot node in this run averages 6.0 layer-0 neighbors, under the construction-time cap of 10; a densified node averages 46.7, nearly 5x over that cap, measured directly by `demos/benchmark.py`, not implied by the mechanism's description. p99 search latency in the summary chart above goes from 0.83ms (static) to roughly 3ms (self-tuning) on this toy dataset as a direct consequence: a wider beam at a fixed `ef` costs more, in exchange for reaching neighbors a narrower beam would have missed. The mechanism is a trade of local search cost for recall in regions that traffic actually cares about, and the right way to read the charts together is that self-tuning spends a little more time per query in exchange for a lot more correct answers where it counts, not that one index is unconditionally better than the other.
 
@@ -94,17 +104,14 @@ src/adaptann/
   bruteforce.py   exact k-NN, the ground truth every recall number here is checked against
   metrics.py      recall_at_k
   hnsw.py         HNSW: construction, search, and the self-tuning densify mechanism
-  viz.py          matplotlib charts: recall over time, summary bars, cold-start recovery,
-                  the promotion-vs-densify diagnostic, and the degree-widening chart
+  viz.py          matplotlib charts, the promotion-vs-densify dot plot, and the degree diagram
   demos/
     benchmark.py             the drifting-workload simulation that produced most charts above
     promotion_diagnostic.py  reconstructs the abandoned promotion mechanism for comparison
   cli.py          `adaptann benchmark`
 tests/
-  test_hnsw.py         recall vs. brute force, and the structural invariants (layer membership,
-                       degree caps, bidirectional edges) checked directly as graph properties
-  test_self_tuning.py  promotion-threshold gating, and the recall-at-fixed-ef comparison that
-                       replaced the first mechanism's flawed distance-computation comparison
+  test_hnsw.py         recall vs. brute force, plus structural invariants as graph properties
+  test_self_tuning.py  promotion-threshold gating, and the recall-at-fixed-ef comparison
 ```
 
 ## The test that would catch a regression here
