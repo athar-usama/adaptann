@@ -1,23 +1,24 @@
 """Charts for the drifting-workload benchmark.
 
-Shared visual language with this author's other from-scratch projects:
-slate gray for the static baseline, emerald green for the self-tuning
-index, amber only for callout annotations. Bars and lines get their value
-labeled directly so the numbers are legible without reading the axis.
+Visual language: amber for the static baseline, teal for the self-tuning
+index (validated as a colorblind-safe pair, not eyeballed), plus a
+diagonal hatch on every static bar as a second, non-color-dependent way
+to tell the two apart. Bars are flat, fully rounded "pill" shapes with a
+value label set directly inside each one, a deliberately different
+silhouette from a conventional flat-topped column chart.
 """
 
 from __future__ import annotations
 
-_STATIC = "#64748b"
-_ADAPTIVE = "#059669"
-_ADAPTIVE_DARK = "#065f46"
-_ACCENT = "#b45309"
+_STATIC = "#b45309"
+_STATIC_DARK = "#7c2d12"
+_ADAPTIVE = "#0d9488"
+_ADAPTIVE_DARK = "#115e59"
 _GRID = "#e5e7eb"
 _TEXT = "#1f2937"
 _MUTED = "#6b7280"
 _BAND_A = "#f8fafc"
 _BAND_B = "#f1f5f9"
-_SHADOW = "#0f172a"
 
 
 def _style_axis(ax) -> None:
@@ -31,60 +32,39 @@ def _style_axis(ax) -> None:
     ax.yaxis.label.set_color(_TEXT)
 
 
-def _lighten(hex_color: str, amount: float) -> tuple:
-    from matplotlib.colors import to_rgb
-
-    r, g, b = to_rgb(hex_color)
-    return (r + (1 - r) * amount, g + (1 - g) * amount, b + (1 - b) * amount)
-
-
-def _gradient_bar(ax, x_center: float, height: float, width: float, color: str, *, zorder: int = 3) -> None:
-    """A single bar with a rounded top, a soft vertical color gradient, and
-    a faint drop shadow, instead of a flat-filled rectangle. The rounded
-    bottom corners a plain FancyBboxPatch would draw are pushed below
-    ``y=0`` and cropped away by the axes' own clip box, so only the top
-    stays visibly rounded."""
-    import numpy as np
-    from matplotlib.colors import LinearSegmentedColormap
+def _pill_bar(
+    ax, x_center: float, height: float, width: float, color: str, text: str, *,
+    hatch: str | None = None, zorder: int = 3,
+) -> None:
+    """A flat, fully-rounded "pill" bar (not a gradient column): solid
+    fill, a thin white separator stroke, an optional diagonal hatch (used
+    for the static series, so the two are still distinguishable without
+    relying on color at all), and its value set as white text inside the
+    bar rather than floating above it."""
     from matplotlib.patches import FancyBboxPatch
 
     if height <= 0:
         return
-    radius = min(width, height) * 0.22
+    radius = min(width, height) * 0.4
 
-    shadow = FancyBboxPatch(
-        (x_center - width / 2 + width * 0.05, -radius),
-        width, height + radius,
-        boxstyle=f"round,pad=0,rounding_size={radius}",
-        linewidth=0, facecolor=_SHADOW, alpha=0.10, zorder=zorder - 1,
-        transform=ax.transData,
-    )
-    ax.add_patch(shadow)
-
-    outline = FancyBboxPatch(
+    patch = FancyBboxPatch(
         (x_center - width / 2, -radius), width, height + radius,
         boxstyle=f"round,pad=0,rounding_size={radius}",
-        linewidth=0, facecolor="none", zorder=zorder,
-        transform=ax.transData,
+        linewidth=1.8, edgecolor="white", facecolor=color, hatch=hatch,
+        zorder=zorder, transform=ax.transData,
     )
-    ax.add_patch(outline)
+    ax.add_patch(patch)
 
-    cmap = LinearSegmentedColormap.from_list("bar", [_lighten(color, 0.55), color])
-    gradient = np.linspace(0, 1, 256).reshape(-1, 1)
-    im = ax.imshow(
-        gradient, extent=(x_center - width / 2, x_center + width / 2, -radius, height),
-        origin="lower", aspect="auto", cmap=cmap, zorder=zorder,
-        transform=ax.transData,
-    )
-    im.set_clip_path(outline)
-
-
-def _value_chip(ax, x_center: float, y: float, text: str, *, color: str = _TEXT) -> None:
-    ax.text(
-        x_center, y, text, ha="center", va="bottom", fontsize=12.5, color=color, fontweight="bold",
-        bbox={"boxstyle": "round,pad=0.32", "facecolor": "white", "edgecolor": _GRID, "linewidth": 1},
-        zorder=6,
-    )
+    if height > radius * 2.4:
+        ax.text(
+            x_center, height - radius * 0.9, text, ha="center", va="top",
+            fontsize=12.5, color="white", fontweight="bold", zorder=zorder + 2,
+        )
+    else:
+        ax.text(
+            x_center, height + radius * 0.5, text, ha="center", va="bottom",
+            fontsize=12.5, color=_TEXT, fontweight="bold", zorder=zorder + 2,
+        )
 
 
 def plot_recall_over_time(
@@ -144,14 +124,15 @@ def plot_summary_bars(
     path,
 ) -> None:
     """One figure, two panels: mean recall@k and p99 search latency,
-    static vs. self-tuning, side by side, as rounded gradient bars with a
-    soft shadow and a labeled value chip above each one."""
+    static vs. self-tuning, side by side, as flat hatch-vs-solid pill
+    bars with the value set inside each one."""
     import matplotlib.pyplot as plt
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11.5, 5))
     fig.patch.set_facecolor("white")
     labels = ["static", "self-tuning"]
     colors = [_STATIC, _ADAPTIVE]
+    hatches = ["////", None]
     bar_width = 0.5
 
     for ax, values, title, ylabel, fmt in (
@@ -159,9 +140,8 @@ def plot_summary_bars(
         (ax2, [p99_static_ms, p99_adaptive_ms], "p99 search latency", "milliseconds", "{:.2f} ms"),
     ):
         ax.set_facecolor(_BAND_A)
-        for i, (val, color) in enumerate(zip(values, colors, strict=True)):
-            _gradient_bar(ax, i, val, bar_width, color)
-            _value_chip(ax, i, val, fmt.format(val), color=_ADAPTIVE_DARK if color == _ADAPTIVE else _TEXT)
+        for i, (val, color, hatch) in enumerate(zip(values, colors, hatches, strict=True)):
+            _pill_bar(ax, i, val, bar_width, color, fmt.format(val), hatch=hatch)
 
         ax.set_xticks(range(len(labels)))
         ax.set_xticklabels(labels, fontsize=11)
@@ -190,8 +170,8 @@ def plot_cold_start_recovery(
     topic cluster's recall@k on its first burst of traffic (cold, nobody
     promoted yet) versus its second burst, a full cycle later (adaptive
     has already densified it and never forgets; static hasn't changed at
-    all, because it can't). Rounded gradient bars with a value chip on
-    each, matching the rest of this project's charts."""
+    all, because it can't). Flat hatch-vs-solid pill bars, matching the
+    rest of this project's charts."""
     import matplotlib.patches as mpatches
     import matplotlib.pyplot as plt
 
@@ -208,10 +188,8 @@ def plot_cold_start_recovery(
     adaptive_vals = [adaptive_first_visit, adaptive_second_visit]
 
     for c, s_val, a_val in zip(centers, static_vals, adaptive_vals, strict=True):
-        _gradient_bar(ax, c - offset, s_val, width, _STATIC)
-        _value_chip(ax, c - offset, s_val, f"{s_val:.0%}")
-        _gradient_bar(ax, c + offset, a_val, width, _ADAPTIVE)
-        _value_chip(ax, c + offset, a_val, f"{a_val:.0%}", color=_ADAPTIVE_DARK)
+        _pill_bar(ax, c - offset, s_val, width, _STATIC, f"{s_val:.0%}", hatch="////")
+        _pill_bar(ax, c + offset, a_val, width, _ADAPTIVE, f"{a_val:.0%}")
 
     ax.set_xticks(centers)
     ax.set_xticklabels(groups, fontsize=11)
