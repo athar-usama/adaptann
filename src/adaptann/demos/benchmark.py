@@ -24,7 +24,7 @@ import numpy as np
 from ..bruteforce import brute_force_knn
 from ..hnsw import HNSW
 from ..metrics import recall_at_k
-from ..viz import plot_cold_start_recovery, plot_degree_widening, plot_recall_over_time, plot_summary_bars
+from ..viz import plot_cold_start_recovery, plot_recall_over_time, plot_summary_bars, render_degree_diagram_svg
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
 ASSETS_DIR = ROOT / "assets"
@@ -176,7 +176,7 @@ def main() -> None:
             first["static"], first["adaptive"], second["static"], second["adaptive"],
             worst_topic, ASSETS_DIR / "cold_start_recovery.png",
         )
-    plot_degree_widening(normal_degree, widened_degree, adaptive.M_max0, ASSETS_DIR / "degree_widening.png")
+    render_degree_diagram_svg(normal_degree, widened_degree, adaptive.M_max0, ASSETS_DIR / "degree_widening.svg")
     print(f"wrote charts to {ASSETS_DIR}")
 
 

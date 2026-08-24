@@ -45,7 +45,7 @@ The redesign that followed from that diagnosis: stop touching the hierarchy, and
 
 Densifying a node's neighborhood means later searches that pass through it examine more candidates, not fewer.
 
-![A densified node's real layer-0 neighbor count next to a typical node's, with the construction-time degree cap marked](assets/degree_widening.png)
+![A typical node's real layer-0 neighbors, drawn one spoke per neighbor, next to a densified node's](assets/degree_widening.svg)
 
 A never-hot node in this run averages 6.0 layer-0 neighbors, under the construction-time cap of 10; a densified node averages 46.7, nearly 5x over that cap, measured directly by `demos/benchmark.py`, not implied by the mechanism's description. p99 search latency in the summary chart above goes from 0.83ms (static) to roughly 3ms (self-tuning) on this toy dataset as a direct consequence: a wider beam at a fixed `ef` costs more, in exchange for reaching neighbors a narrower beam would have missed. The mechanism is a trade of local search cost for recall in regions that traffic actually cares about, and the right way to read the charts together is that self-tuning spends a little more time per query in exchange for a lot more correct answers where it counts, not that one index is unconditionally better than the other.
 

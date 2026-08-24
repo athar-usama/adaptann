@@ -10,6 +10,8 @@ silhouette from a conventional flat-topped column chart.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 _STATIC = "#b45309"
 _STATIC_DARK = "#7c2d12"
 _ADAPTIVE = "#0d9488"
@@ -216,118 +218,108 @@ def plot_cold_start_recovery(
 
 
 def plot_promotion_vs_densify(static: tuple[float, float], promoted: tuple[float, float], path) -> None:
-    """The chart behind the redesign story: mean distance computations per
-    query, split into upper-layer descent vs. the layer-0 pass, for the
-    static baseline and for the abandoned upper-layer-promotion
-    mechanism, averaged over several seeds. Layer 0 barely moves between
-    the two, which is the actual diagnosis: promotion cannot help,
-    because it never touches the layer that dominates cost. ``promoted``
-    is marked with a cross-hatch and a violet fill, distinct in kind (not
-    just color) from the amber static baseline, since it is not a real
-    alternative, just a documented dead end; see the summary and
-    cold-start charts elsewhere in this README for the mechanism that
-    replaced it."""
-    import matplotlib.patches as mpatches
+    """The chart behind the redesign story, as a dot-and-stem comparison
+    rather than another bar chart: for each of the two search phases, one
+    dot for the static baseline and one for the abandoned promotion
+    mechanism, on a shared stem. Two dots landing on almost the same
+    point *is* the finding, and a bar chart tends to visually exaggerate
+    small differences through bar-height weight; a dot plot doesn't."""
     import matplotlib.pyplot as plt
-    from matplotlib.patches import FancyBboxPatch
 
-    fig, ax = plt.subplots(figsize=(9.5, 5.8))
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8.5, 4.6))
     fig.patch.set_facecolor("white")
-    ax.set_facecolor(_BAND_A)
 
-    groups = ["upper layers\n(descent to ef=1)", "layer 0\n(the ef-bounded pass)"]
-    centers = [0.0, 1.3]
-    offsets = [-0.24, 0.24]
-    width = 0.4
-    series = [(_STATIC, None, "static"), (_REJECTED, "xxxx", "promoted (abandoned)")]
-    values_by_group = [[static[0], promoted[0]], [static[1], promoted[1]]]
-    max_val = max(max(v) for v in values_by_group)
+    rows = [
+        (ax1, "layer 0  (the ef-bounded pass)", static[1], promoted[1]),
+        (ax2, "upper layers  (descent to ef=1)", static[0], promoted[0]),
+    ]
 
-    # The corner radius has to be measured against ``width`` (x-data-units),
-    # not against the y-scale: this axis spans ~2 x-units but ~350 y-units,
-    # so a radius picked as a fraction of the y-range would be many times
-    # wider than the bars themselves. `min(width, val)` keeps it sane for
-    # both the short "upper layers" and tall "layer 0" bars alike, since
-    # every bar here is far taller than it is wide.
-    for group_center, values in zip(centers, values_by_group, strict=True):
-        for offset, val, (color, hatch, _label) in zip(offsets, values, series, strict=True):
-            x_center = group_center + offset
-            radius = min(width, val) * 0.4
-            patch = FancyBboxPatch(
-                (x_center - width / 2, -radius), width, val + radius,
-                boxstyle=f"round,pad=0,rounding_size={radius}",
-                linewidth=1.8, edgecolor="white", facecolor=color, hatch=hatch, zorder=3,
-                transform=ax.transData,
-            )
-            ax.add_patch(patch)
-            ax.text(
-                x_center, val + max_val * 0.02, f"{val:.0f}", ha="center", va="bottom",
-                fontsize=12, fontweight="bold", color=_TEXT, zorder=6,
-            )
+    for ax, label, static_val, promoted_val in rows:
+        ax.set_facecolor(_BAND_A)
+        lo, hi = min(static_val, promoted_val), max(static_val, promoted_val)
+        pad = max(hi * 0.35, 3)
+        ax.plot([lo, hi], [0, 0], color=_MUTED, linewidth=2, zorder=2, solid_capstyle="round")
+        ax.scatter([static_val], [0], s=260, color=_STATIC, zorder=3, edgecolor="white", linewidth=1.5)
+        ax.scatter(
+            [promoted_val], [0], s=260, color=_REJECTED, marker="X", zorder=4, edgecolor="white", linewidth=1.2
+        )
+        ax.text(
+            static_val, 0.55, f"static\n{static_val:.0f}", ha="center", va="bottom",
+            fontsize=10.5, color=_STATIC_DARK, fontweight="bold",
+        )
+        ax.text(
+            promoted_val, -0.55, f"promoted\n{promoted_val:.0f}", ha="center", va="top",
+            fontsize=10.5, color=_REJECTED_DARK, fontweight="bold",
+        )
 
-    ax.set_xticks(centers)
-    ax.set_xticklabels(groups, fontsize=11)
-    ax.set_xlim(centers[0] - 0.7, centers[-1] + 0.7)
-    ax.set_ylabel("mean distance computations")
-    ax.set_ylim(0, max_val * 1.22)
-    ax.set_title(
+        ax.set_ylim(-1.3, 1.3)
+        ax.set_xlim(lo - pad, hi + pad)
+        ax.set_yticks([])
+        ax.set_ylabel(label, fontsize=10.5, rotation=0, ha="right", va="center", labelpad=10)
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        ax.tick_params(colors=_MUTED, labelsize=9)
+
+    fig.suptitle(
         "Layer 0, the dominant cost, barely moves: promotion never touches it",
-        fontsize=13, fontweight="bold", loc="left", pad=14,
+        fontsize=13, fontweight="bold", x=0.02, ha="left", y=0.99,
     )
-    ax.grid(axis="y", color="white", linewidth=1.4, zorder=0)
-    ax.set_axisbelow(True)
-
-    handles = [mpatches.Patch(facecolor=c, hatch=h, label=label) for c, h, label in series]
-    ax.legend(handles=handles, loc="upper right", frameon=False, labelcolor=_TEXT, fontsize=10)
-    _style_axis(ax)
-
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
     fig.savefig(path, dpi=160, facecolor="white")
     plt.close(fig)
 
 
-def plot_degree_widening(normal_degree: float, widened_degree: float, degree_cap: int, path) -> None:
-    """The chart behind the honest-cost section: a densified node's actual
-    layer-0 degree against a typical, never-hot node's, both measured on
-    the same warmed-up index from ``demos/benchmark.py``, with the normal
-    construction-time degree cap marked as a reference line. This is the
-    concrete shape of "later searches through it examine more
-    candidates": not a multiplier claimed in prose, a real average."""
-    import matplotlib.pyplot as plt
+def render_degree_diagram_svg(normal_degree: float, widened_degree: float, degree_cap: int, path) -> None:
+    """The figure behind the honest-cost section, as an actual node-and-edges
+    drawing rather than a bar chart: a hub with ``normal_degree`` spokes
+    next to a hub with ``widened_degree`` spokes, one spoke per real
+    layer-0 neighbor, both counts measured on the same warmed-up index
+    from ``demos/benchmark.py``. The point ("densified nodes end up far
+    more connected") is the actual density of lines on the page, not an
+    abstraction of it."""
+    import math
 
-    fig, ax = plt.subplots(figsize=(8, 5.5))
-    fig.patch.set_facecolor("white")
-    ax.set_facecolor(_BAND_A)
+    bg, text, muted = "#f8fafc", "#1f2937", "#6b7280"
+    panel_w = 340
+    hub_r, spoke_len, dot_r = 15, 105, 3.4
+    top_margin, label_block_h, bottom_margin = 40, 54, 16
+    width = panel_w * 2 + 20
+    height = top_margin + spoke_len + hub_r + spoke_len + label_block_h + bottom_margin
 
-    labels = ["typical node", "densified node"]
-    values = [normal_degree, widened_degree]
-    colors = [_STATIC, _ADAPTIVE]
-    hatches = ["////", None]
-    width = 0.5
+    def panel(cx: float, cy: float, degree: float, color: str, label: str) -> list[str]:
+        n = max(int(round(degree)), 1)
+        elems = []
+        for i in range(n):
+            angle = 2 * math.pi * i / n - math.pi / 2
+            ex = cx + spoke_len * math.cos(angle)
+            ey = cy + spoke_len * math.sin(angle)
+            elems.append(
+                f'<line x1="{cx:.1f}" y1="{cy:.1f}" x2="{ex:.1f}" y2="{ey:.1f}" '
+                f'stroke="{color}" stroke-width="1.1" opacity="0.55"/>'
+            )
+            elems.append(f'<circle cx="{ex:.1f}" cy="{ey:.1f}" r="{dot_r}" fill="{color}"/>')
+        elems.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{hub_r}" fill="{bg}" stroke="{color}" stroke-width="3"/>')
+        elems.append(
+            f'<text x="{cx:.1f}" y="{cy + spoke_len + 34:.1f}" font-size="15" font-weight="bold" '
+            f'fill="{text}" text-anchor="middle">{label}</text>'
+        )
+        elems.append(
+            f'<text x="{cx:.1f}" y="{cy + spoke_len + 54:.1f}" font-size="12.5" fill="{muted}" '
+            f'text-anchor="middle">{degree:.1f} layer-0 neighbors</text>'
+        )
+        return elems
 
-    for i, (val, color, hatch) in enumerate(zip(values, colors, hatches, strict=True)):
-        _pill_bar(ax, i, val, width, color, f"{val:.1f}", hatch=hatch)
+    svg = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+        f'viewBox="0 0 {width} {height}" font-family="Consolas, Menlo, monospace">',
+        f'<rect width="{width}" height="{height}" fill="{bg}"/>',
+        f'<text x="20" y="26" font-size="14" fill="{text}">Densified nodes end up far more '
+        'connected than typical ones</text>',
+    ]
+    cy = top_margin + spoke_len
+    svg += panel(panel_w / 2, cy, normal_degree, _STATIC, f"typical node (cap {degree_cap})")
+    svg += panel(panel_w * 1.5 + 20, cy, widened_degree, _ADAPTIVE, "densified node")
+    svg.append("</svg>")
 
-    ax.axhline(degree_cap, color=_MUTED, linewidth=1.5, linestyle="--", zorder=4)
-    ax.text(
-        1.62, degree_cap, f" cap: {degree_cap} ", color=_MUTED, fontsize=9.5,
-        va="center", ha="left", bbox={"boxstyle": "round,pad=0.2", "facecolor": "white", "edgecolor": "none"},
-        zorder=5,
-    )
-
-    ax.set_xticks(range(len(labels)))
-    ax.set_xticklabels(labels, fontsize=11)
-    ax.set_xlim(-0.6, 2.0)
-    ax.set_ylabel("layer-0 neighbor count")
-    ax.set_ylim(0, max(values) * 1.3)
-    ax.set_title(
-        "Densified nodes end up far more connected than typical ones",
-        fontsize=13, fontweight="bold", loc="left", pad=14,
-    )
-    ax.grid(axis="y", color="white", linewidth=1.4, zorder=0)
-    ax.set_axisbelow(True)
-    _style_axis(ax)
-
-    fig.tight_layout()
-    fig.savefig(path, dpi=160, facecolor="white")
-    plt.close(fig)
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text("\n".join(svg), encoding="utf-8")
