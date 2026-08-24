@@ -14,6 +14,8 @@ _STATIC = "#b45309"
 _STATIC_DARK = "#7c2d12"
 _ADAPTIVE = "#0d9488"
 _ADAPTIVE_DARK = "#115e59"
+_REJECTED = "#7c3aed"
+_REJECTED_DARK = "#4c1d95"
 _GRID = "#e5e7eb"
 _TEXT = "#1f2937"
 _MUTED = "#6b7280"
@@ -206,6 +208,124 @@ def plot_cold_start_recovery(
         mpatches.Patch(facecolor=_ADAPTIVE, label="self-tuning"),
     ]
     ax.legend(handles=handles, loc="upper left", frameon=False, labelcolor=_TEXT, fontsize=10.5)
+    _style_axis(ax)
+
+    fig.tight_layout()
+    fig.savefig(path, dpi=160, facecolor="white")
+    plt.close(fig)
+
+
+def plot_promotion_vs_densify(static: tuple[float, float], promoted: tuple[float, float], path) -> None:
+    """The chart behind the redesign story: mean distance computations per
+    query, split into upper-layer descent vs. the layer-0 pass, for the
+    static baseline and for the abandoned upper-layer-promotion
+    mechanism, averaged over several seeds. Layer 0 barely moves between
+    the two, which is the actual diagnosis: promotion cannot help,
+    because it never touches the layer that dominates cost. ``promoted``
+    is marked with a cross-hatch and a violet fill, distinct in kind (not
+    just color) from the amber static baseline, since it is not a real
+    alternative, just a documented dead end; see the summary and
+    cold-start charts elsewhere in this README for the mechanism that
+    replaced it."""
+    import matplotlib.patches as mpatches
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import FancyBboxPatch
+
+    fig, ax = plt.subplots(figsize=(9.5, 5.8))
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor(_BAND_A)
+
+    groups = ["upper layers\n(descent to ef=1)", "layer 0\n(the ef-bounded pass)"]
+    centers = [0.0, 1.3]
+    offsets = [-0.24, 0.24]
+    width = 0.4
+    series = [(_STATIC, None, "static"), (_REJECTED, "xxxx", "promoted (abandoned)")]
+    values_by_group = [[static[0], promoted[0]], [static[1], promoted[1]]]
+    max_val = max(max(v) for v in values_by_group)
+
+    # The corner radius has to be measured against ``width`` (x-data-units),
+    # not against the y-scale: this axis spans ~2 x-units but ~350 y-units,
+    # so a radius picked as a fraction of the y-range would be many times
+    # wider than the bars themselves. `min(width, val)` keeps it sane for
+    # both the short "upper layers" and tall "layer 0" bars alike, since
+    # every bar here is far taller than it is wide.
+    for group_center, values in zip(centers, values_by_group, strict=True):
+        for offset, val, (color, hatch, _label) in zip(offsets, values, series, strict=True):
+            x_center = group_center + offset
+            radius = min(width, val) * 0.4
+            patch = FancyBboxPatch(
+                (x_center - width / 2, -radius), width, val + radius,
+                boxstyle=f"round,pad=0,rounding_size={radius}",
+                linewidth=1.8, edgecolor="white", facecolor=color, hatch=hatch, zorder=3,
+                transform=ax.transData,
+            )
+            ax.add_patch(patch)
+            ax.text(
+                x_center, val + max_val * 0.02, f"{val:.0f}", ha="center", va="bottom",
+                fontsize=12, fontweight="bold", color=_TEXT, zorder=6,
+            )
+
+    ax.set_xticks(centers)
+    ax.set_xticklabels(groups, fontsize=11)
+    ax.set_xlim(centers[0] - 0.7, centers[-1] + 0.7)
+    ax.set_ylabel("mean distance computations")
+    ax.set_ylim(0, max_val * 1.22)
+    ax.set_title(
+        "Layer 0, the dominant cost, barely moves: promotion never touches it",
+        fontsize=13, fontweight="bold", loc="left", pad=14,
+    )
+    ax.grid(axis="y", color="white", linewidth=1.4, zorder=0)
+    ax.set_axisbelow(True)
+
+    handles = [mpatches.Patch(facecolor=c, hatch=h, label=label) for c, h, label in series]
+    ax.legend(handles=handles, loc="upper right", frameon=False, labelcolor=_TEXT, fontsize=10)
+    _style_axis(ax)
+
+    fig.tight_layout()
+    fig.savefig(path, dpi=160, facecolor="white")
+    plt.close(fig)
+
+
+def plot_degree_widening(normal_degree: float, widened_degree: float, degree_cap: int, path) -> None:
+    """The chart behind the honest-cost section: a densified node's actual
+    layer-0 degree against a typical, never-hot node's, both measured on
+    the same warmed-up index from ``demos/benchmark.py``, with the normal
+    construction-time degree cap marked as a reference line. This is the
+    concrete shape of "later searches through it examine more
+    candidates": not a multiplier claimed in prose, a real average."""
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(8, 5.5))
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor(_BAND_A)
+
+    labels = ["typical node", "densified node"]
+    values = [normal_degree, widened_degree]
+    colors = [_STATIC, _ADAPTIVE]
+    hatches = ["////", None]
+    width = 0.5
+
+    for i, (val, color, hatch) in enumerate(zip(values, colors, hatches, strict=True)):
+        _pill_bar(ax, i, val, width, color, f"{val:.1f}", hatch=hatch)
+
+    ax.axhline(degree_cap, color=_MUTED, linewidth=1.5, linestyle="--", zorder=4)
+    ax.text(
+        1.62, degree_cap, f" cap: {degree_cap} ", color=_MUTED, fontsize=9.5,
+        va="center", ha="left", bbox={"boxstyle": "round,pad=0.2", "facecolor": "white", "edgecolor": "none"},
+        zorder=5,
+    )
+
+    ax.set_xticks(range(len(labels)))
+    ax.set_xticklabels(labels, fontsize=11)
+    ax.set_xlim(-0.6, 2.0)
+    ax.set_ylabel("layer-0 neighbor count")
+    ax.set_ylim(0, max(values) * 1.3)
+    ax.set_title(
+        "Densified nodes end up far more connected than typical ones",
+        fontsize=13, fontweight="bold", loc="left", pad=14,
+    )
+    ax.grid(axis="y", color="white", linewidth=1.4, zorder=0)
+    ax.set_axisbelow(True)
     _style_axis(ax)
 
     fig.tight_layout()
